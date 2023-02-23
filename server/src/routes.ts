@@ -6,6 +6,7 @@ import { prisma } from "./lib/prisma"
 
 
 export async function appRoutes(app: FastifyInstance) {
+    // Post - Create Habit
     app.post('/habits', async (request) => {
         const creationHabitBody = z.object({
             title: z.string(),
@@ -30,6 +31,7 @@ export async function appRoutes(app: FastifyInstance) {
         })
     })
 
+    // Get day
     app.get('/day', async (request) => { // 'day' = dia da semana / 'date' = data com dia e mês
         const getDayParams = z.object({
             date: z.coerce.date() //Converte a string recebida do parâmetro date em data no banco de dados
@@ -78,7 +80,7 @@ export async function appRoutes(app: FastifyInstance) {
         }
     })
 
-    // Habit Toggle
+    // Patch Habit Toggle
     app.patch('/habits/:id/toggle', async (request) => {
         // route param (parameter of identification)
         const toggleHabitParams = z.object({
@@ -128,6 +130,37 @@ export async function appRoutes(app: FastifyInstance) {
             }
         })
         }
+    })
+
+    // Get Summary Table (Completion of  Habits Representation with Squares by % Percentage of Possible Habits and Completed Habits at each day) - High complexity and rules.
+    app.get('/summary', async () => {
+        
+        const summary = await prisma.$queryRaw` /* $queryRaw - It is a function of prisma so we can make a Raw Query to the DB */
+            SELECT 
+                D.id, 
+                D.date,
+                (
+                    /* Subquery - Selecting all the available habits to completed of this specific date. */
+                    SELECT
+                        cast(count(*) as float)
+                    FROM habit_week_days HWD
+                    JOIN habits H /* Validation of a habit was created before the date */
+                        ON H.id = HWD.habit_id 
+                    WHERE
+                        HWD.week_day = cast(strftime('%w', D.date/1000.0, 'unixepoch') as int)
+                        AND H.created_at <= D.date /* Validation of habit date creation */
+                ) as amount, /* Defining the name of this query return as: amount */
+                (   
+                    /* Subquery - Selecting the completed habits of the specific date.Selecionando a contagem de vezes em que o day_id da tabela day_habits é igual ao id. */
+                    SELECT 
+                        cast(count(*) as float)
+                    FROM day_habits DH
+                    WHERE DH.day_id = D.id
+                ) as completed /*Defining the name of this query return as: completed */
+            FROM days D
+        `
+
+        return summary
     })
 }
 
